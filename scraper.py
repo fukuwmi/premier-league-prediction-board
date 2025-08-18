@@ -7,7 +7,8 @@ from firebase_admin import credentials, firestore
 from datetime import datetime, timezone, timedelta
 
 # --- 設定項目 ---
-scraping_target_url = "https://www.bbc.com/sport/football/premier-league/table"
+# 取得先をより安定しているSky Sportsに変更
+scraping_target_url = "https://www.skysports.com/premier-league-table"
 project_id = "predictionprediction"
 # --- 設定項目ここまで ---
 
@@ -21,32 +22,37 @@ def main():
         response.raise_for_status()
         
         soup = BeautifulSoup(response.text, 'html.parser')
-        team_name_elements = soup.select('table[class*="Table"] tbody tr td:nth-of-type(3) span[title]')
+        
+        # --- 【ここから修正】 ---
+        # Sky SportsのHTML構造に対応したCSSセレクタに変更
+        team_name_elements = soup.select('table.standing-table__table tbody tr a.standing-table__cell--name-link')
+        # --- 【ここまで修正】 ---
 
         if not team_name_elements:
              raise ValueError("Could not find team names on the page. The website structure might have changed.")
 
         team_name_map = {
             "Arsenal": "アーセナル", "Aston Villa": "アストン・ヴィラ", "Bournemouth": "ボーンマス",
-            "Brentford": "ブレントフォード", "Brighton and Hove Albion": "ブライトン", "Chelsea": "チェルシー",
+            "Brentford": "ブレントフォード", "Brighton": "ブライトン", "Chelsea": "チェルシー", # Sky Sportsでは 'Brighton'
             "Crystal Palace": "クリスタル・パレス", "Everton": "エヴァートン", "Fulham": "フラム",
-            "Ipswich Town": "イプスウィッチ・タウン", "Leicester City": "レスター・シティ", "Liverpool": "リヴァプール",
-            "Manchester City": "マンチェスター・シティ", "Manchester United": "マンチェスター・ユナイテッド",
-            "Newcastle United": "ニューカッスル・ユナイテッド", "Nottingham Forest": "ノッティンガム・フォレスト",
-            "Southampton": "サウサンプトン", "Tottenham Hotspur": "トッテナム",
-            "West Ham United": "ウェストハム", "Wolverhampton Wanderers": "ウルヴァーハンプトン",
+            "Ipswich": "イプスウィッチ・タウン", "Leicester": "レスター・シティ", "Liverpool": "リヴァプール", # Sky Sportsでの表記
+            "Man City": "マンチェスター・シティ", "Man Utd": "マンチェスター・ユナイテッド", # Sky Sportsでの表記
+            "Newcastle": "ニューカッスル・ユナイテッド", "Nott'm Forest": "ノッティンガム・フォレスト", # Sky Sportsでの表記
+            "Southampton": "サウサンプトン", "Tottenham": "トッテナム", # Sky Sportsでの表記
+            "West Ham": "ウェストハム", "Wolves": "ウルヴァーハンプトン", # Sky Sportsでの表記
+            # 旧チーム名も念のため追加
             "Burnley": "バーンリー", "Leeds United": "リーズ・ユナイテッド", "Sunderland": "サンダーランド"
         }
 
         standings = []
         for element in team_name_elements:
-            english_name = element.get('title', '').strip()
+            english_name = element.get_text(strip=True)
             japanese_name = team_name_map.get(english_name)
             if japanese_name:
                 standings.append(japanese_name)
 
         if len(standings) != 20:
-            raise ValueError(f"Expected 20 teams, but found {len(standings)}. Data might be incomplete.")
+            raise ValueError(f"Expected 20 teams, but found {len(standings)}. Data might be incomplete. Found teams: {standings}")
 
         print("Successfully scraped standings:")
         for i, team in enumerate(standings):
@@ -60,8 +66,6 @@ def main():
         cred_dict = json.loads(firebase_credentials_json)
         cred = credentials.Certificate(cred_dict)
         
-        # --- 【ここが重要な修正点】 ---
-        # 既に接続済みかを確認する処理を追加
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
             
