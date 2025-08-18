@@ -7,7 +7,6 @@ from datetime import datetime, timezone, timedelta
 import time
 
 # --- 設定項目 ---
-# Sky Sportsが内部的に使用しているデータAPIのURLに変更
 api_url = "https://footballapi.skysports.com/api/v1/competitions/1/seasons/2024/tables"
 project_id = "predictionprediction"
 # --- 設定項目ここまで ---
@@ -24,12 +23,13 @@ def main():
                 print(f"Attempt {attempt + 1} of {max_retries} to fetch API data...")
                 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
                 response = requests.get(api_url, headers=headers, timeout=30)
-                response.raise_for_for_status() # HTTPエラーがあればここで例外を発生させる
                 
-                # 取得したデータをJSON形式として解析
+                # --- 【ここを修正】 ---
+                # raise_for_for_status() -> raise_for_status() にタイプミスを修正
+                response.raise_for_status()
+                # --- 【ここまで修正】 ---
+                
                 data = response.json()
-                
-                # JSONデータの中から順位表のリストを取得
                 table_rows = data.get('tables', [{}])[0].get('rows', [])
 
                 if not table_rows:
@@ -37,7 +37,7 @@ def main():
 
                 team_name_map = {
                     "Arsenal": "アーセナル", "Aston Villa": "アストン・ヴィラ", "Bournemouth": "ボーンマス",
-                    "Brentford": "ブレントフォード", "Brighton & Hove Albion": "ブライトン", # APIではフルネーム
+                    "Brentford": "ブレントフォード", "Brighton & Hove Albion": "ブライトン",
                     "Chelsea": "チェルシー", "Crystal Palace": "クリスタル・パレス", "Everton": "エヴァートン", 
                     "Fulham": "フラム", "Ipswich Town": "イプスウィッチ・タウン", "Leicester City": "レスター・シティ", 
                     "Liverpool": "リヴァプール", "Manchester City": "マンチェスター・シティ", "Manchester United": "マンチェスター・ユナイテッド",
@@ -48,7 +48,6 @@ def main():
                 }
 
                 scraped_standings = []
-                # position（順位）でソート
                 sorted_rows = sorted(table_rows, key=lambda x: x.get('position', 99))
 
                 for row in sorted_rows:
@@ -95,7 +94,7 @@ def main():
         # 3. 取得した順位をFirestoreに保存
         doc_ref = db.collection('artifacts').document(project_id).collection('public').document('data').collection('actualStandings').document('currentWeek')
         
-        jst = timezone(timezone(timedelta(hours=9))
+        jst = timezone(timedelta(hours=9))
         
         data_to_save = {
             'standings': standings,
