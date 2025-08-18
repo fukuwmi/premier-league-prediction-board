@@ -1,15 +1,19 @@
 name: Update Premier League Standings
 
 on:
-  # 日本時間の毎日午前10時に実行 (UTCの午前1時)
   schedule:
     - cron: '0 1 * * *'
-  # 手動でも実行できるようにする
   workflow_dispatch:
 
 jobs:
   scrape-and-update:
+    # --- 【ここから修正】 ---
+    # エラーが発生した場合、最大3回まで再試行する
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        attempt: [1, 2, 3]
+    # --- 【ここまで修正】 ---
     steps:
       - name: Check out repository
         uses: actions/checkout@v3
