@@ -6,10 +6,12 @@ from firebase_admin import credentials, firestore
 from datetime import datetime, timezone, timedelta
 import time
 
-# --- 設定項目 ---
-api_url = "https://footballapi.skysports.com/api/v1/competitions/1/seasons/2024/tables"
+# --- 【ここを修正】 ---
+# APIのURLを2024年シーズンから2025年シーズンに変更
+api_url = "https://footballapi.skysports.com/api/v1/competitions/1/seasons/2025/tables"
+# --- 【ここまで修正】 ---
+
 project_id = "predictionprediction"
-# --- 設定項目ここまで ---
 
 def main():
     print("Process started to fetch data from API...")
@@ -23,11 +25,7 @@ def main():
                 print(f"Attempt {attempt + 1} of {max_retries} to fetch API data...")
                 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
                 response = requests.get(api_url, headers=headers, timeout=30)
-                
-                # --- 【ここを修正】 ---
-                # raise_for_for_status() -> raise_for_status() にタイプミスを修正
                 response.raise_for_status()
-                # --- 【ここまで修正】 ---
                 
                 data = response.json()
                 table_rows = data.get('tables', [{}])[0].get('rows', [])
