@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>プレミアリーグ 順位予想ボード</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <link href="https://fonts.googleapis.comcom/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* --- 基本スタイル --- */
+        body { font-family: 'Inter', 'Noto Sans JP', sans-serif; background: linear-gradient(135deg, #d4ff00, #00ffc8); color: #1a202c; }
+        .content-card { background-color: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); }
+        .table-container { overflow-x: auto; }
+        table { border-collapse: separate; border-spacing: 0; min-width: 100%; }
+        th, td { border: 1px solid #e2e8f0; padding: 0.75rem; text-align: center; white-space: nowrap; }
+        th { background-color: #00ffc8; color: #1a202c; position: sticky; top: 0; z-index: 10; }
+        .pundit-header { background-color: #a78bfa; color: #ffffff; font-weight: 700; }
+        .rank-col { position: sticky; left: 0; background-color: #f0f9ff; z-index: 5; min-width: 60px; }
+        td { background-color: #ffffff; }
+        select:disabled { background-color: #e9ecef; opacity: 0.7; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #qrcode img { margin: auto; }
+        .rip-jota { font-size: 5rem; font-weight: 900; color: #ffffff; text-shadow: 3px 3px 0px #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; text-align: center; padding: 4rem 1rem; background-color: #38003c; }
+        .aggregate-cards-container { display: none; }
+
+        /* --- スマートフォン向けスタイル --- */
+        @media (max-width: 768px) {
+            body { -webkit-text-size-adjust: 100%; }
+            .container { padding: 0.5rem; }
+            .content-card, .text-center { padding: 1rem; }
+            h1 { font-size: 1.5rem; justify-content: center; }
+            h1 img { height: 2.5rem; }
+            #countdown { font-size: 1.1rem; }
+            #predictionTable th, #predictionTable td { padding: 0.5rem 0.75rem; font-size: 0.875rem; white-space: nowrap; }
+            #predictionTable .team-select-cell { min-width: 180px; }
+            #aggregate-results .table-container { display: none; }
+            .aggregate-cards-container { display: grid; grid-template-columns: 1fr; gap: 0.75rem; }
+            .aggregate-card { display: flex; align-items: center; background-color: white; border-radius: 0.5rem; padding: 0.75rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+            .aggregate-card .rank { font-size: 1.25rem; font-weight: 700; color: #3b82f6; width: 3rem; text-align: center; }
+            .aggregate-card img { width: 2rem; height: 2rem; margin: 0 0.75rem; }
+            .aggregate-card .team-name { flex-grow: 1; font-weight: 500; }
+            .aggregate-card .points { font-weight: 700; }
+            .rip-jota { font-size: 3rem; padding: 2rem 1rem; }
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div id="app" class="container mx-auto p-4 md:p-8">
+        <div class="content-card rounded-xl shadow-lg p-6 md:p-8 mb-6">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4 flex items-center justify-center md:justify-start">
+                <img id="pl-logo" src="https://upload.wikimedia.org/wikipedia/en/thumb/f/f2/Premier_League_Logo.svg/1200px-Premier_League_Logo.svg.png" alt="Premier League Logo" class="h-10 md:h-12 mr-4">
+                プレミアリーグ順位予想ボード
+            </h1>
+            <p class="text-gray-600 text-center md:text-left">仲間と一緒に来シーズンの順位を予想しよう！</p>
+        </div>
+        <div id="deadline-info" class="content-card text-center rounded-xl shadow-lg p-6 mb-6">
+            <h2 id="countdown" class="text-2xl font-bold text-blue-600"></h2>
+            <p id="deadline-message" class="mt-2 text-gray-700 font-semibold"></p>
+        </div>
+        <div id="loading" class="flex justify-center items-center h-64">
+            <div class="loader"></div>
+            <p class="ml-4 text-lg">データを読み込み中...</p>
+        </div>
+        <div id="content" class="hidden">
+            <div class="content-card rounded-xl shadow-lg p-6 md:p-8 mb-6">
+                <h2 class="text-xl font-bold mb-4">あなたの情報</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                    <div>
+                        <label for="userName" class="block text-sm font-medium text-gray-700 mb-1">あなたの名前:</label>
+                        <input type="text" id="userName" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="名前を入力">
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-600">あなたのユーザーID (仲間と共有用):</p>
+                        <div class="flex items-center gap-2 mt-1">
+                            <input type="text" id="userIdDisplay" class="w-full p-2 bg-gray-100 border border-gray-300 rounded-lg" readonly>
+                            <button id="copyUserId" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg transition">コピー</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="admin-panel" class="hidden mt-4 p-4 bg-purple-100 border border-purple-300 rounded-lg">
+                    <label for="isPunditCheckbox" class="flex items-center font-bold text-purple-800">
+                        <input type="checkbox" id="isPunditCheckbox" class="h-5 w-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
+                        <span class="ml-2 text-lg">👑 管理者として保存 (著名人・識者として登録)</span>
+                    </label>
+                    <p class="text-sm text-purple-700 mt-2 ml-7">これをオンにして保存すると、**新しいデータとして**著名人枠に追加されます。(あなた自身の予想は上書きされません)</p>
+                </div>
+                 <div class="mt-4">
+                    <p class="text-sm text-gray-600">アプリID (この予想ボードのID):</p>
+                    <p id="appIdDisplay" class="text-lg font-mono bg-gray-100 p-2 rounded-lg"></p>
+                </div>
+            </div>
+
+            <div id="actual-standings-admin-panel" class="hidden content-card rounded-xl shadow-lg p-6 md:p-8 mb-6">
+                <h2 class="text-xl font-bold mb-4">👑 実際の順位を更新</h2>
+                <div id="actual-standings-form" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                    </div>
+                <div class="mt-6 text-right">
+                    <button id="save-actual-standings" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg">最新の順位を保存</button>
+                </div>
+                 <p class="text-xs text-gray-500 mt-2 text-right">※保存すると的中ランキングが全ユーザーに表示されます。</p>
+            </div>
+
+            <div class="content-card rounded-xl shadow-lg mb-6">
+                <div class="p-6 border-b border-gray-200">
+                    <h2 class="text-2xl font-bold">順位予想表</h2>
+                    <p class="text-sm text-gray-600 mt-1">⭐マークは有名選手やサッカー系Youtuberなどの著名人の予想です。</p>
+                </div>
+                <div id="message-area" class="p-4 text-center"></div>
+                <div class="table-container">
+                    <table id="predictionTable" class="w-full"></table>
+                </div>
+                <div class="p-6 text-right">
+                     <button id="save" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition-transform duration-200 transform hover:scale-105">
+                        予想を保存
+                    </button>
+                </div>
+            </div>
+
+            <div id="accuracy-ranking" class="hidden content-card rounded-xl shadow-lg mb-6">
+                <div class="p-6 border-b border-gray-200">
+                    <h2 class="text-2xl font-bold">🎯 的中ランキング</h2>
+                    <p class="text-sm text-gray-600 mt-1">実際の順位と比べて、誰の予想が一番近いかをランク付けしています。<br>「差分ポイント」が少ないほど、予想が当たっていることを示します。</p>
+                    <p id="last-updated-text" class="text-xs text-gray-500 mt-2"></p>
+                </div>
+                <div class="table-container">
+                    <table class="w-full">
+                        <thead> <tr> <th class="rank-col">#</th> <th>名前</th> <th>差分ポイント</th> </tr> </thead>
+                        <tbody id="accuracy-ranking-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="aggregate-results" class="content-card rounded-xl shadow-lg mb-6">
+                <div class="p-6 border-b border-gray-200">
+                    <h2 class="text-2xl font-bold">みんなの総合予想</h2>
+                </div>
+                <div class="table-container">
+                    <table class="w-full">
+                        <thead> <tr> <th class="rank-col">順位</th> <th class="text-left pl-4">チーム</th> <th>合計ポイント</th> </tr> </thead>
+                        <tbody id="aggregate-tbody-pc"></tbody>
+                    </table>
+                </div>
+                <div class="aggregate-cards-container p-4" id="aggregate-div-mobile"></div>
+            </div>
+            <div class="text-center mt-8">
+                <button id="share-button" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-8 rounded-lg transition-transform duration-200 transform hover:scale-105">
+                    このページを共有する
+                </button>
+            </div>
+            <div class="mt-8 text-center content-card rounded-xl shadow-lg p-6">
+                <h3 class="text-lg font-bold mb-4">QRコードで共有</h3>
+                <div id="qrcode" class="flex justify-center"></div>
+            </div>
+        </div>
+    </div>
+     <footer class="rip-jota"> RIP JOTA </footer>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, onSnapshot, setDoc, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const PREMIER_LEAGUE_TEAMS = ["アーセナル", "アストン・ヴィラ", "ボーンマス", "ブレントフォード", "ブライトン", "バーンリー", "チェルシー", "クリスタル・パレス", "エヴァートン", "フラム", "リーズ・ユナイテッド", "リヴァプール", "マンチェスター・シティ", "マンチェスター・ユナイテッド", "ニューカッスル・ユナイテッド", "ノッティンガム・フォレスト", "サンダーランド", "トッテナム", "ウェストハム", "ウルヴァーハンプトン"];
+        const TEAM_LOGOS = { "アーセナル": "https://upload.wikimedia.org/wikipedia/en/thumb/5/53/Arsenal_FC.svg/120px-Arsenal_FC.svg.png", "アストン・ヴィラ": "https://upload.wikimedia.org/wikipedia/en/thumb/9/9f/Aston_Villa_FC_crest_%282023%29.svg/120px-Aston_Villa_FC_crest_%282023%29.svg.png", "ボーンマス": "https://upload.wikimedia.org/wikipedia/en/thumb/e/e5/AFC_Bournemouth_%282013%29.svg/120px-AFC_Bournemouth_%282013%29.svg.png", "ブレントフォード": "https://upload.wikimedia.org/wikipedia/en/thumb/2/2a/Brentford_FC_crest.svg/120px-Brentford_FC_crest.svg.png", "ブライトン": "https://upload.wikimedia.org/wikipedia/en/thumb/f/fd/Brighton_%26_Hove_Albion_logo.svg/120px-Brighton_%26_Hove_Albion_logo.svg.png", "バーンリー": "https://upload.wikimedia.org/wikipedia/en/thumb/6/62/Burnley_F.C._logo.svg/120px-Burnley_F.C._logo.svg.png", "チェルシー": "https://upload.wikimedia.org/wikipedia/en/thumb/c/cc/Chelsea_FC.svg/120px-Chelsea_FC.svg.png", "クリスタル・パレス": "https://upload.wikimedia.org/wikipedia/en/thumb/a/a2/Crystal_Palace_FC_logo_%282022%29.svg/120px-Crystal_Palace_FC_logo_%282022%29.svg.png", "エヴァートン": "https://upload.wikimedia.org/wikipedia/en/thumb/7/7c/Everton_FC_logo.svg/120px-Everton_FC_logo.svg.png", "フラム": "https://upload.wikimedia.org/wikipedia/en/thumb/e/eb/Fulham_FC_%28shield%29.svg/120px-Fulham_FC_%28shield%29.svg.png", "リーズ・ユナイテッド": "https://upload.wikimedia.org/wikipedia/en/thumb/5/54/Leeds_United_F.C._logo.svg/120px-Leeds_United_F.C._logo.svg.png", "リヴァプール": "https://upload.wikimedia.org/wikipedia/en/thumb/0/0c/Liverpool_FC.svg/120px-Liverpool_FC.svg.png", "マンチェスター・シティ": "https://upload.wikimedia.org/wikipedia/en/thumb/e/eb/Manchester_City_FC_badge.svg/120px-Manchester_City_FC_badge.svg.png", "マンチェスター・ユナイテッド": "https://upload.wikimedia.org/wikipedia/en/thumb/7/7a/Manchester_United_F.C._crest.svg/120px-Manchester_United_F.C._crest.svg.png", "ニューカッスル・ユナイテッド": "https://upload.wikimedia.org/wikipedia/en/thumb/5/56/Newcastle_United_Logo.svg/120px-Newcastle_United_Logo.svg.png", "ノッティンガム・フォレスト": "https://upload.wikimedia.org/wikipedia/en/thumb/a/a4/Nottingham_Forest_F.C._logo.svg/120px-Nottingham_Forest_F.C._logo.svg.png", "サンダーランド": "https://upload.wikimedia.org/wikipedia/en/thumb/7/77/Sunderland_AFC_logo.svg/120px-Sunderland_AFC_logo.svg.png", "トッテナム": "https://upload.wikimedia.org/wikipedia/en/thumb/b/b4/Tottenham_Hotspur.svg/120px-Tottenham_Hotspur.svg.png", "ウェストハム": "https://upload.wikimedia.org/wikipedia/en/thumb/c/c2/West_Ham_United_FC_logo.svg/120px-West_Ham_United_FC_logo.svg.png", "ウルヴァーハンプトン": "https://upload.wikimedia.org/wikipedia/en/thumb/f/fc/Wolverhampton_Wanderers.svg/120px-Wolverhampton_Wanderers.svg.png", "placeholder": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAAPFJREFUeF7t20EKgDAQA0F3/v+1I8FQBEEn7UPM2g4E4K53dwkQIECAAAECBAgQIECAAAECBAgQIECAAAECBAgQIECAAAECBAgQIECAAAECBAgQIECAAAECBAgQIECAAIHDAlh7w+A8eL8D2HqXm/sLgZ/f/14CBAgQIPAW4KkP3gIECBAgQOD/Ar57wJ+HAAECBAgQeAtw9YF7QIAAAQIE/gL88wE/jwABAgQIEHgLcPWBeyBAgAABAgT+AvzzAT+PAAECBAgQeAtw9YF7QIAAAQIE/gL88wE/jwABAgQIEPi/AN4BDP4HlA/q/xUAAAAASUVORK5CYII=" };
+        const DEADLINE = new Date('2025-08-31T23:00:00Z');
+        const firebaseConfig = { apiKey: "AIzaSyCBmsbEbcReuePRTZz1tyJ1ElAc-Yu9EbI", authDomain: "predictionprediction.firebaseapp.com", projectId: "predictionprediction", storageBucket: "predictionprediction.appspot.com", messagingSenderId: "574195516155", appId: "1:574195516155:web:8e310a7cf48853a478265e", measurementId: "G-RM792NE07V" };
+        const appId = firebaseConfig.projectId;
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let currentUserId = null;
+        let allUsersData = {};
+        let actualStandingsData = null;
+        let isSetupDone = false;
+        let isAdminMode = false;
+
+        // DOM Elements
+        const loadingEl = document.getElementById('loading');
+        const contentEl = document.getElementById('content');
+        const userNameInput = document.getElementById('userName');
+        const userIdDisplay = document.getElementById('userIdDisplay');
+        const copyUserIdBtn = document.getElementById('copyUserId');
+        const appIdDisplay = document.getElementById('appIdDisplay');
+        const saveBtn = document.getElementById('save');
+        const tableEl = document.getElementById('predictionTable');
+        const messageArea = document.getElementById('message-area');
+        const countdownEl = document.getElementById('countdown');
+        const deadlineMessageEl = document.getElementById('deadline-message');
+        const aggregateTbodyPc = document.getElementById('aggregate-tbody-pc');
+        const aggregateDivMobile = document.getElementById('aggregate-div-mobile');
+        const shareBtn = document.getElementById('share-button');
+        const qrcodeEl = document.getElementById('qrcode');
+        // Admin panels
+        const adminPanel = document.getElementById('admin-panel');
+        const isPunditCheckbox = document.getElementById('isPunditCheckbox');
+        const actualStandingsAdminPanel = document.getElementById('actual-standings-admin-panel');
+        const actualStandingsForm = document.getElementById('actual-standings-form');
+        const saveActualStandingsBtn = document.getElementById('save-actual-standings');
+        // Accuracy ranking elements
+        const accuracyRankingPanel = document.getElementById('accuracy-ranking');
+        const accuracyRankingTbody = document.getElementById('accuracy-ranking-tbody');
+        const lastUpdatedText = document.getElementById('last-updated-text');
+
+        function checkAdminMode() {
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.get('admin') === 'true') {
+                    isAdminMode = true;
+                    adminPanel.classList.remove('hidden');
+                    actualStandingsAdminPanel.classList.remove('hidden');
+                }
+            } catch (e) { console.error("URLパラメータの解析に失敗しました:", e); isAdminMode = false; }
+        }
+        checkAdminMode();
+
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                currentUserId = user.uid;
+                if (!isSetupDone) {
+                    setupApp();
+                    isSetupDone = true;
+                }
+            } else {
+                try { await signInAnonymously(auth); } catch (error) { console.error("Authentication Error:", error); loadingEl.innerHTML = `<p class="text-red-600 font-bold text-center">認証エラー！<br>Firebaseコンソールで「Authentication」＞「Sign-in method」タブから「匿名」認証を有効にしてください。</p>`; }
+            }
+        });
+        
+        function setupApp() {
+            loadingEl.style.display = 'none';
+            contentEl.style.display = 'block';
+            userIdDisplay.value = currentUserId;
+            appIdDisplay.textContent = appId;
+            updateCountdown();
+            setInterval(updateCountdown, 1000 * 60);
+            generateQRCode();
+            
+            // Listen for user predictions
+            const predictionsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'predictions');
+            onSnapshot(predictionsCollectionRef, (snapshot) => {
+                const newUsersData = {};
+                snapshot.forEach((doc) => { newUsersData[doc.id] = doc.data(); });
+                allUsersData = newUsersData;
+                if (allUsersData[currentUserId] && !isAdminMode) {
+                    userNameInput.value = allUsersData[currentUserId].userName || '';
+                } else if (isAdminMode) {
+                    userNameInput.value = '';
+                }
+                renderTable();
+                renderAggregateResults();
+                calculateAndRenderAccuracyRanking(); // Re-calculate ranking when predictions change
+            });
+
+            // Listen for actual standings
+            const actualStandingsDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'actualStandings', 'currentWeek');
+            onSnapshot(actualStandingsDocRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    actualStandingsData = docSnap.data();
+                    accuracyRankingPanel.classList.remove('hidden');
+                    if (isAdminMode) {
+                        renderActualStandingsForm(actualStandingsData.standings);
+                    }
+                } else {
+                    actualStandingsData = null;
+                    accuracyRankingPanel.classList.add('hidden');
+                     if (isAdminMode) {
+                        renderActualStandingsForm([]);
+                    }
+                }
+                calculateAndRenderAccuracyRanking(); // Re-calculate ranking when actual standings change
+            });
+
+            saveBtn.addEventListener('click', savePrediction);
+            copyUserIdBtn.addEventListener('click', copyUserIdToClipboard);
+            shareBtn.addEventListener('click', sharePage);
+            if(isAdminMode) {
+                saveActualStandingsBtn.addEventListener('click', saveActualStandings);
+            }
+        }
+
+        // --- Render Functions ---
+        function renderTable() {
+            const isDeadlineOver = isDeadlinePassed();
+            tableEl.innerHTML = '';
+            const thead = document.createElement('thead');
+            const headerRow = document.createElement('tr');
+            headerRow.innerHTML = '<th class="rank-col">順位</th>';
+            const userIds = Object.keys(allUsersData);
+            const punditIds = userIds.filter(id => allUsersData[id].isPundit === true);
+            const otherUserIds = userIds.filter(id => id !== currentUserId && !punditIds.includes(id));
+            const sortedUserIds = [currentUserId, ...punditIds.sort((a, b) => (allUsersData[a].userName || '').localeCompare(allUsersData[b].userName || '')), ...otherUserIds.sort((a, b) => (allUsersData[a].userName || '').localeCompare(allUsersData[b].userName || ''))];
+            for (const userId of sortedUserIds) {
+                if (!userId || !allUsersData[userId]) continue;
+                const userHeader = document.createElement('th');
+                const userData = allUsersData[userId];
+                let displayName = userData?.userName || '名無しさん';
+                if (userData.isPundit === true) {
+                    userHeader.textContent = `⭐ ${displayName}`;
+                    userHeader.classList.add('pundit-header');
+                } else if (userId === currentUserId) {
+                    displayName += ' (あなた)';
+                    userHeader.classList.add('user-is-current');
+                    userHeader.textContent = displayName;
+                } else {
+                    userHeader.textContent = displayName;
+                }
+                userHeader.className += ' min-w-[200px]';
+                headerRow.appendChild(userHeader);
+            }
+            thead.appendChild(headerRow);
+            tableEl.appendChild(thead);
+            const tbody = document.createElement('tbody');
+            for (let i = 1; i <= 20; i++) {
+                const row = document.createElement('tr');
+                row.innerHTML = `<td class="rank-col font-semibold">${i}位</td>`;
+                for (const userId of sortedUserIds) {
+                     if (!userId || !allUsersData[userId]) continue;
+                    const cell = document.createElement('td');
+                    let prediction = '';
+                    if (userId === currentUserId && isAdminMode) {
+                        prediction = '';
+                    } else {
+                        prediction = allUsersData[userId]?.predictions?.[i - 1] || '';
+                    }
+                    if (userId === currentUserId) {
+                        cell.classList.add('user-is-current');
+                        cell.appendChild(createTeamSelect(i - 1, prediction, isDeadlineOver));
+                        cell.classList.add('team-select-cell');
+                    } else {
+                        if (prediction) {
+                            cell.innerHTML = `<div class="flex items-center justify-center gap-2"><img src="${TEAM_LOGOS[prediction] || TEAM_LOGOS.placeholder}" alt="${prediction} Logo" class="h-6 w-6 object-contain" onerror="this.src='${TEAM_LOGOS.placeholder}'; this.onerror=null;"><span>${prediction}</span></div>`;
+                        } else {
+                            cell.textContent = '-';
+                        }
+                    }
+                    row.appendChild(cell);
+                }
+                tbody.appendChild(row);
+            }
+            tableEl.appendChild(tbody);
+            tbody.addEventListener('change', (event) => { if (event.target.tagName === 'SELECT') updateAllSelectOptions(document.querySelectorAll('#predictionTable select')); });
+            updateAllSelectOptions(document.querySelectorAll('#predictionTable select'));
+        }
+
+        function renderAggregateResults() {
+            const points = {};
+            PREMIER_LEAGUE_TEAMS.forEach(team => { points[team] = 0; });
+            Object.values(allUsersData).forEach(userData => {
+                if (userData.predictions) {
+                    userData.predictions.forEach((team, index) => {
+                        if (team && points.hasOwnProperty(team)) points[team] += (20 - index); 
+                    });
+                }
+            });
+            const sortedTeams = Object.entries(points).map(([team, score]) => ({ team, score })).sort((a, b) => b.score - a.score);
+            let pcHtml = '';
+            let mobileHtml = '';
+            sortedTeams.forEach((item, index) => {
+                const logoSrc = TEAM_LOGOS[item.team] || TEAM_LOGOS.placeholder;
+                const rank = index + 1;
+                pcHtml += `<tr><td class="rank-col font-semibold">${rank}位</td><td class="text-left pl-4"><div class="flex items-center gap-3"><img src="${logoSrc}" alt="${item.team} Logo" class="h-6 w-6 object-contain" onerror="this.src='${TEAM_LOGOS.placeholder}'; this.onerror=null;"><span class="font-medium">${item.team}</span></div></td><td class="font-bold">${item.score}</td></tr>`;
+                mobileHtml += `<div class="aggregate-card"><div class="rank">${rank}位</div><img src="${logoSrc}" alt="${item.team} Logo" onerror="this.src='${TEAM_LOGOS.placeholder}'; this.onerror=null;"><div class="team-name">${item.team}</div><div class="points">${item.score}pt</div></div>`;
+            });
+            aggregateTbodyPc.innerHTML = pcHtml;
+            aggregateDivMobile.innerHTML = mobileHtml;
+        }
+
+        // --- New Ranking Functions ---
+        function calculateAndRenderAccuracyRanking() {
+            if (!actualStandingsData || !actualStandingsData.standings || actualStandingsData.standings.length !== 20) {
+                accuracyRankingPanel.classList.add('hidden');
+                return;
+            }
+
+            const actual = actualStandingsData.standings;
+            const rankings = [];
+
+            for (const userId in allUsersData) {
+                const userData = allUsersData[userId];
+                if (userData.predictions && userData.predictions.length === 20) {
+                    let totalDifference = 0;
+                    userData.predictions.forEach((predictedTeam, predictedRankIndex) => {
+                        const actualRankIndex = actual.indexOf(predictedTeam);
+                        if (actualRankIndex !== -1) {
+                            totalDifference += Math.abs(predictedRankIndex - actualRankIndex);
+                        } else {
+                            totalDifference += 20; // Penalty if team is not in actual standings
+                        }
+                    });
+                    rankings.push({
+                        name: userData.userName || '名無しさん',
+                        score: totalDifference,
+                        isPundit: userData.isPundit === true
+                    });
+                }
+            }
+
+            rankings.sort((a, b) => a.score - b.score);
+
+            let rankingHtml = '';
+            rankings.forEach((user, index) => {
+                rankingHtml += `
+                    <tr class="text-center">
+                        <td class="rank-col font-bold">${index + 1}</td>
+                        <td class="text-left pl-4 font-medium">${user.isPundit ? '⭐ ' : ''}${user.name}</td>
+                        <td class="font-bold text-blue-600">${user.score}</td>
+                    </tr>
+                `;
+            });
+
+            accuracyRankingTbody.innerHTML = rankingHtml;
+            if (actualStandingsData.lastUpdated) {
+                lastUpdatedText.textContent = `最終更新: ${actualStandingsData.lastUpdated.toDate().toLocaleString('ja-JP')}`;
+            }
+            accuracyRankingPanel.classList.remove('hidden');
+        }
+
+        function renderActualStandingsForm(standings = []) {
+            let formHtml = '';
+            for (let i = 0; i < 20; i++) {
+                const selectedTeam = standings[i] || '';
+                formHtml += `
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">${i + 1}位</label>
+                        ${createTeamSelect(i, selectedTeam, false, 'actual-select').outerHTML}
+                    </div>
+                `;
+            }
+            actualStandingsForm.innerHTML = formHtml;
+            actualStandingsForm.addEventListener('change', (event) => {
+                if (event.target.tagName === 'SELECT') {
+                    updateAllSelectOptions(document.querySelectorAll('#actual-standings-form select'));
+                }
+            });
+             updateAllSelectOptions(document.querySelectorAll('#actual-standings-form select'));
+        }
+
+        // --- Helper & Utility Functions ---
+        function createTeamSelect(rankIndex, selectedTeam, disabled, customClass = '') {
+            const select = document.createElement('select');
+            select.className = `w-full p-2 border border-gray-300 rounded-md bg-white ${customClass}`;
+            select.dataset.rank = rankIndex;
+            select.disabled = disabled;
+            select.innerHTML = `<option value="">チームを選択</option>` + PREMIER_LEAGUE_TEAMS.map(team => `<option value="${team}" ${team === selectedTeam ? 'selected' : ''}>${team}</option>`).join('');
+            return select;
+        }
+
+        function updateAllSelectOptions(selects) {
+            const selectedTeams = new Set();
+            selects.forEach(s => { if (s.value) selectedTeams.add(s.value); });
+            selects.forEach(select => {
+                const currentVal = select.value;
+                for (const option of select.options) {
+                    if (!option.value) continue;
+                    option.style.display = (selectedTeams.has(option.value) && option.value !== currentVal) ? 'none' : '';
+                }
+            });
+        }
+        
+        async function savePrediction() {
+            if (isDeadlinePassed()) { showMessage('締め切りを過ぎたため、予想を保存できません。', 'error'); return; }
+            const newUserName = userNameInput.value.trim();
+            if (!newUserName) { showMessage('名前を入力してください。', 'error'); return; }
+            const selects = document.querySelectorAll('#predictionTable select');
+            const predictions = Array.from({ length: 20 });
+            selects.forEach(select => { predictions[parseInt(select.dataset.rank)] = select.value; });
+            const isPundit = isAdminMode && isPunditCheckbox.checked;
+            const dataToSave = { userName: newUserName, predictions: predictions, isPundit: isPundit };
+            try {
+                const predictionsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'predictions');
+                if (isPundit) {
+                    await addDoc(predictionsCollectionRef, dataToSave);
+                    showMessage(`著名人「${newUserName}」の予想を追加しました！`, 'success');
+                    userNameInput.value = '';
+                    isPunditCheckbox.checked = false;
+                    selects.forEach(s => s.selectedIndex = 0);
+                    updateAllSelectOptions(selects);
+                } else {
+                    const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'predictions', currentUserId);
+                    await setDoc(userDocRef, dataToSave, { merge: true });
+                    showMessage('あなたの予想を保存しました！', 'success');
+                }
+            } catch (error) { console.error("Error saving prediction: ", error); showMessage('保存中にエラーが発生しました。', 'error'); }
+        }
+
+        async function saveActualStandings() {
+            const selects = document.querySelectorAll('#actual-standings-form select');
+            const standings = Array.from({ length: 20 });
+            let allSelected = true;
+            selects.forEach(select => {
+                const rank = parseInt(select.dataset.rank);
+                standings[rank] = select.value;
+                if(!select.value) allSelected = false;
+            });
+
+            if(!allSelected) {
+                showMessage('全ての順位を選択してください。', 'error');
+                return;
+            }
+
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'actualStandings', 'currentWeek');
+                await setDoc(docRef, { 
+                    standings: standings,
+                    lastUpdated: serverTimestamp()
+                 });
+                showMessage('最新の順位を保存しました！', 'success');
+            } catch (error) {
+                console.error("Error saving actual standings: ", error);
+                showMessage('順位の保存中にエラーが発生しました。', 'error');
+            }
+        }
+
+        function copyUserIdToClipboard() { userIdDisplay.select(); document.execCommand('copy'); showMessage('ユーザーIDをコピーしました！', 'info'); }
+        async function sharePage() { const shareData = { title: 'プレミアリーグ 順位予想ボード', text: 'みんなでプレミアリーグの順位を予想しよう！', url: window.location.href }; try { if (navigator.share) { await navigator.share(shareData); } else { navigator.clipboard.writeText(window.location.href).then(() => { showMessage('共有URLをクリップボードにコピーしました！', 'info'); }); } } catch (err) { console.error("Share failed:", err); } }
+        function showMessage(text, type) { messageArea.textContent = text; const colors = { success: 'bg-green-100 text-green-800', error: 'bg-red-100 text-red-800', info: 'bg-blue-100 text-blue-800' }; messageArea.className = `p-4 text-center rounded-lg ${colors[type] || colors.info}`; setTimeout(() => { messageArea.className = 'p-4 text-center'; messageArea.textContent = ''; }, 3000); }
+        function isDeadlinePassed() { return new Date() > DEADLINE; }
+        function updateCountdown() { if (isDeadlinePassed()) { countdownEl.textContent = "投票は終了しました"; deadlineMessageEl.textContent = "たくさんのご参加ありがとうございました！"; userNameInput.disabled = true; saveBtn.disabled = true; saveBtn.classList.add('opacity-50', 'cursor-not-allowed'); } else { const diff = DEADLINE - new Date(); const days = Math.floor(diff / (1000 * 60 * 60 * 24)); const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)); const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)); countdownEl.innerHTML = `投票締め切りまで、あと <span class="text-red-500">${days}</span> 日 <span class="text-red-500">${hours}</span> 時間 <span class="text-red-500">${minutes}</span> 分`; deadlineMessageEl.textContent = "締め切りまで予想の修正は何度でも可能です！"; } }
+        function generateQRCode() { qrcodeEl.innerHTML = ""; new QRCode(qrcodeEl, { text: window.location.href, width: 128, height: 128, colorDark : "#000000", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.H }); }
+    </script>
+</body>
+</html>
