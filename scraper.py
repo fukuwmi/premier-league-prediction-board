@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 import firebase_admin
 from firebase_admin import credentials, firestore
 from datetime import datetime, timezone, timedelta
-import time # スリープ（待機）のためにtimeモジュールをインポート
+import time
 
 # --- 設定項目 ---
 scraping_target_url = "https://www.skysports.com/premier-league-table"
@@ -16,7 +16,6 @@ def main():
     print("Scraping process started...")
     
     try:
-        # --- 【ここから修正】 ---
         # 1. ウェブサイトから順位表を取得 (リトライ機能付き)
         standings = None
         max_retries = 3
@@ -24,7 +23,8 @@ def main():
             try:
                 print(f"Attempt {attempt + 1} of {max_retries} to fetch the webpage...")
                 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
-                response = requests.get(scraping_target_url, headers=headers, timeout=15) # タイムアウトを15秒に設定
+                # タイムアウト時間を30秒に延長
+                response = requests.get(scraping_target_url, headers=headers, timeout=30)
                 response.raise_for_status()
                 
                 soup = BeautifulSoup(response.text, 'html.parser')
@@ -55,22 +55,21 @@ def main():
                 if len(scraped_standings) == 20:
                     standings = scraped_standings
                     print("Successfully scraped standings.")
-                    break  # 成功したのでループを抜ける
+                    break
                 else:
                      raise ValueError(f"Expected 20 teams, but found {len(scraped_standings)}.")
 
             except requests.exceptions.RequestException as e:
                 print(f"Network error on attempt {attempt + 1}: {e}")
                 if attempt < max_retries - 1:
-                    print("Retrying in 10 seconds...")
-                    time.sleep(10) # 10秒待機
+                    print("Retrying in 15 seconds...")
+                    time.sleep(15)
                 else:
                     print("Max retries reached. Failing.")
                     raise
         
         if standings is None:
             raise ValueError("Failed to fetch standings after multiple retries.")
-        # --- 【ここまで修正】 ---
 
         for i, team in enumerate(standings):
             print(f"{i+1}: {team}")
