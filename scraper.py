@@ -21,12 +21,7 @@ def main():
         response.raise_for_status()
         
         soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # --- 【ここから修正】 ---
-        # BBC Sportの新しいHTML構造に対応したCSSセレクタに変更
-        # チーム名が含まれるspan要素をより確実に捉える
         team_name_elements = soup.select('table[class*="Table"] tbody tr td:nth-of-type(3) span[title]')
-        # --- 【ここまで修正】 ---
 
         if not team_name_elements:
              raise ValueError("Could not find team names on the page. The website structure might have changed.")
@@ -45,7 +40,6 @@ def main():
 
         standings = []
         for element in team_name_elements:
-            # title属性からチーム名を取得するように変更
             english_name = element.get('title', '').strip()
             japanese_name = team_name_map.get(english_name)
             if japanese_name:
@@ -66,6 +60,8 @@ def main():
         cred_dict = json.loads(firebase_credentials_json)
         cred = credentials.Certificate(cred_dict)
         
+        # --- 【ここが重要な修正点】 ---
+        # 既に接続済みかを確認する処理を追加
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
             
