@@ -21,17 +21,19 @@ def main():
         response.raise_for_status()
         
         soup = BeautifulSoup(response.text, 'html.parser')
-        team_name_elements = soup.select('table.ssrcss-14h76s6-Display-Table tr td:nth-of-type(3) a .ssrcss-1q36sbl-TeamNameLink')
-
-        if not team_name_elements:
-            team_name_elements = soup.select('table tbody tr td:nth-of-type(3) span')
+        
+        # --- 【ここから修正】 ---
+        # BBC Sportの新しいHTML構造に対応したCSSセレクタに変更
+        # チーム名が含まれるspan要素をより確実に捉える
+        team_name_elements = soup.select('table[class*="Table"] tbody tr td:nth-of-type(3) span[title]')
+        # --- 【ここまで修正】 ---
 
         if not team_name_elements:
              raise ValueError("Could not find team names on the page. The website structure might have changed.")
 
         team_name_map = {
             "Arsenal": "アーセナル", "Aston Villa": "アストン・ヴィラ", "Bournemouth": "ボーンマス",
-            "Brentford": "ブレントフォード", "Brighton & Hove Albion": "ブライトン", "Chelsea": "チェルシー",
+            "Brentford": "ブレントフォード", "Brighton and Hove Albion": "ブライトン", "Chelsea": "チェルシー",
             "Crystal Palace": "クリスタル・パレス", "Everton": "エヴァートン", "Fulham": "フラム",
             "Ipswich Town": "イプスウィッチ・タウン", "Leicester City": "レスター・シティ", "Liverpool": "リヴァプール",
             "Manchester City": "マンチェスター・シティ", "Manchester United": "マンチェスター・ユナイテッド",
@@ -43,7 +45,8 @@ def main():
 
         standings = []
         for element in team_name_elements:
-            english_name = element.get_text(strip=True)
+            # title属性からチーム名を取得するように変更
+            english_name = element.get('title', '').strip()
             japanese_name = team_name_map.get(english_name)
             if japanese_name:
                 standings.append(japanese_name)
@@ -55,13 +58,11 @@ def main():
         for i, team in enumerate(standings):
             print(f"{i+1}: {team}")
 
-        # 2. Firebaseに接続 (ここが重要な修正点)
-        # GitHub ActionsのSecretsから認証情報を文字列として読み込む
+        # 2. Firebaseに接続
         firebase_credentials_json = os.environ.get('FIREBASE_CREDENTIALS')
         if not firebase_credentials_json:
             raise ValueError("FIREBASE_CREDENTIALS secret not found.")
         
-        # 文字列をJSON（辞書型）に変換
         cred_dict = json.loads(firebase_credentials_json)
         cred = credentials.Certificate(cred_dict)
         
