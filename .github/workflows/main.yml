@@ -1,13 +1,10 @@
-name: Update Premier League Standings
+name: Firebase Connection Test
 
 on:
-  schedule:
-    # 毎日23:00 (UTC) に実行 (日本時間の午前8時)
-    - cron: '0 23 * * *'
   workflow_dispatch:
 
 jobs:
-  scrape:
+  test:
     runs-on: ubuntu-latest
 
     steps:
@@ -20,14 +17,10 @@ jobs:
           python-version: '3.10'
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests firebase-admin
+        run: pip install firebase-admin
 
       - name: Create Firebase credentials file
         run: echo "${{ secrets.FIREBASE_CREDENTIALS_JSON }}" > predictionprediction-firebase-adminsdk-fbsvc-e801e9cb8b.json
 
-      - name: Run Scraper
-        env:
-          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+      - name: Run Test Script
         run: python scraper.py
