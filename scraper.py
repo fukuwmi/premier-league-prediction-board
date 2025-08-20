@@ -1,45 +1,74 @@
 import os
 import requests
+import firebase_admin
+from firebase_admin import credentials, firestore
+import logging
 import traceback
 
-print("--- API接続テストを開始します ---")
+# --- ログ設定 ---
+logging.basicConfig(
+    filename='premier_league_scraper.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    encoding='utf-8'
+)
 
-try:
-    # ステップ1：APIキーが読み込めているか確認
-    api_key = os.environ.get('API_FOOTBALL_KEY')
-    if not api_key:
-        print("エラー: APIキーが読み込めませんでした。")
+# --- 設定項目 ---
+LEAGUE_ID = "39"
+SEASON = "2025"
+API_URL = f"https://v3.football.api-sports.io/standings?league={LEAGUE_ID}&season={SEASON}"
+credentials_file_name = "predictionprediction-firebase-adminsdk-fbsvc-e801e9cb8b.json"
+
+def main():
+    logging.info("====================")
+    logging.info("自動順位更新スクリプトを開始します。")
+
+    try:
+        api_key = os.environ.get('API_FOOTBALL_KEY')
+        if not api_key:
+            raise ValueError("APIキーが設定されていません。")
+        logging.info("APIキーを正常に読み込みました。")
+
+        headers = {
+            'x-rapidapi-host': 'v3.football.api-sports.io',
+            'x-rapidapi-key': api_key
+        }
+
+        logging.info(f"APIエンドポイントにリクエストを送信します: {API_URL}")
+        response = requests.get(API_URL, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        logging.info("APIからデータを正常に取得しました。")
+
+        standings_data = data['response'][0]['league']['standings'][0]
+        standings = [team['team']['name'] for team in standings_data]
+        if not standings:
+            raise ValueError("APIレスポンスから順位リストを作成できませんでした。")
+        logging.info(f"{len(standings)}チームの順位を解析しました。")
+        
+        if not firebase_admin._apps:
+            cred = credentials.Certificate(credentials_file_name)
+            firebase_admin.initialize_app(cred)
+            logging.info("Firebaseアプリを初期化しました。")
+        
+        db = firestore.client()
+
+        doc_ref = db.collection('artifacts/predictionprediction/public/data/actualStandings').document('currentWeek')
+        logging.info(f"Firestoreのドキュメント '{doc_ref.path}' を更新します。")
+        doc_ref.set({
+            'standings': standings,
+            'lastUpdated': firestore.SERVER_TIMESTAMP
+        })
+        logging.info("Firestoreへのデータ書き込みが正常に完了しました。")
+
+    except Exception as e:
+        logging.error("スクリプトの実行中にエラーが発生しました。")
+        logging.error(traceback.format_exc())
         exit(1)
     
-    # キーの一部だけを表示して、正しく読み込めているか確認
-    print(f"APIキーを読み込みました (先頭4文字: {api_key[:4]}...)" )
+    finally:
+        logging.info("自動順位更新スクリプトを終了します。")
+        logging.info("====================\n")
 
-    # ステップ2：APIにリクエストを送信
-    LEAGUE_ID = "39"  # プレミアリーグ
-    SEASON = "2025"   # 2025-2026シーズン
-    API_URL = f"https://v3.football.api-sports.io/standings?league={LEAGUE_ID}&season={SEASON}"
-    
-    headers = {
-        'x-rapidapi-host': 'v3.football.api-sports.io',
-        'x-rapidapi-key': api_key
-    }
-
-    print(f"ヘッダー情報を設定し、{API_URL} にリクエストを送信します。")
-    response = requests.get(API_URL, headers=headers)
-    
-    # ステップ3：APIからの応答を確認
-    print(f"APIからの応答ステータスコード: {response.status_code}")
-    # 応答のテキスト内容をすべて表示
-    print("--- APIからの応答内容 ---")
-    print(response.text)
-    print("--------------------------")
-
-    # もし応答がエラーなら、ここでスクリプトを止める
-    response.raise_for_status()
-
-    print("APIテストは正常に完了しました。")
-
-except Exception as e:
-    print("--- テスト中にエラーが発生しました ---")
-    print(traceback.format_exc())
-    exit(1)
+if __name__ == "__main__":
+    main()
