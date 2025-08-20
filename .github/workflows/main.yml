@@ -22,12 +22,10 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests firebase-admin
+          pip install requests firebase-admin beautifulsoup4
 
       - name: Create Firebase credentials file
         run: echo "${{ secrets.FIREBASE_CREDENTIALS }}" > predictionprediction-firebase-adminsdk-fbsvc-e801e9cb8b.json
 
       - name: Run Scraper
-        env:
-          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
         run: python scraper.py
