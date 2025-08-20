@@ -12,7 +12,7 @@ logging.basicConfig(
 )
 
 # --- 設定項目 ---
-STANDINGS_URL = "https://www.premierleague.com/tables"
+STANDINGS_URL = "https://www.premierleague.com/en/tables"
 credentials_file_name = "predictionprediction-firebase-adminsdk-fbsvc-e801e9cb8b.json"
 
 def main():
