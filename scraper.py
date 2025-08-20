@@ -40,8 +40,12 @@ def main():
         data = response.json()
         logging.info("APIからデータを正常に取得しました。")
 
+        if not data.get('response'):
+             raise ValueError("APIレスポンスに 'response' が含まれていません。")
+        
         standings_data = data['response'][0]['league']['standings'][0]
         standings = [team['team']['name'] for team in standings_data]
+
         if not standings:
             raise ValueError("APIレスポンスから順位リストを作成できませんでした。")
         logging.info(f"{len(standings)}チームの順位を解析しました。")
