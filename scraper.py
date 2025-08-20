@@ -30,12 +30,14 @@ def main():
 
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # ▼▼▼ この部分を、より確実な検索方法に修正しました ▼▼▼
-        table_container = soup.find('div', class_='tableContainer')
-        if not table_container:
-            raise ValueError("順位表のコンテナが見つかりませんでした。")
-        
-        standings_table = table_container.find('tbody')
+        # ▼▼▼ スクリーンショットを元に、この部分を正しい検索方法に修正しました ▼▼▼
+        # data-widget="standings-table" という目印を持つdiv要素を探す
+        standings_widget = soup.find('div', {'data-widget': 'standings-table'})
+        if not standings_widget:
+            raise ValueError("順位表のウィジェット(data-widget='standings-table')が見つかりませんでした。")
+
+        # そのウィジェットの中にあるtbody（表の本体）を探す
+        standings_table = standings_widget.find('tbody')
         # ▲▲▲ ここまで修正 ▲▲▲
 
         if not standings_table:
@@ -44,9 +46,11 @@ def main():
         rows = standings_table.find_all('tr')
         standings = []
         for row in rows:
-            team_name_span = row.find('span', class_='long')
-            if team_name_span:
-                standings.append(team_name_span.text.strip())
+            # tr要素にdata-team-id属性があるものだけを対象とする
+            if row.has_attr('data-team-id'):
+                team_name_span = row.find('span', class_='long')
+                if team_name_span:
+                    standings.append(team_name_span.text.strip())
 
         if not standings:
             raise ValueError("HTMLから順位リストを作成できませんでした。")
