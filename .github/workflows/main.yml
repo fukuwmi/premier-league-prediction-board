@@ -27,5 +27,7 @@ jobs:
       - name: Create Firebase credentials file
         run: echo "${{ secrets.FIREBASE_CREDENTIALS_JSON }}" > predictionprediction-firebase-adminsdk-fbsvc-e801e9cb8b.json
 
-      - name: Run Scraper
-        run: python scraper.py
+- name: Run Scraper
+            env:
+              API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+            run: python scraper.py
