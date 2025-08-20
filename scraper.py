@@ -5,12 +5,11 @@ from firebase_admin import credentials, firestore
 import logging
 import traceback
 
-# --- ログ設定 ---
+# --- ログ設定（エラーを画面に出力するように修正） ---
 logging.basicConfig(
-    filename='premier_league_scraper.log',
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    encoding='utf-8'
+    format='%(asctime)s - %(levelname)s - %(message)s'
+    # filename=... の行を削除しました
 )
 
 # --- 設定項目 ---
@@ -55,7 +54,7 @@ def main():
             firebase_admin.initialize_app(cred)
             logging.info("Firebaseアプリを初期化しました。")
         
-        db = firestore.client()
+        db = a=firestore.client()
 
         doc_ref = db.collection('artifacts/predictionprediction/public/data/actualStandings').document('currentWeek')
         logging.info(f"Firestoreのドキュメント '{doc_ref.path}' を更新します。")
