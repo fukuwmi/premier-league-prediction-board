@@ -73,6 +73,7 @@ def main():
         logging.info("Firestoreへのデータ書き込みが正常に完了しました。")
 
     except Exception as e:
+        # ★★★この部分がエラー詳細を出力します★★★
         logging.error("スクリプトの実行中にエラーが発生しました。")
         logging.error(traceback.format_exc())
         exit(1)
