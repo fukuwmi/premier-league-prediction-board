@@ -5,11 +5,10 @@ from firebase_admin import credentials, firestore
 import logging
 import traceback
 
-# --- ログ設定（エラーを画面に出力するように修正） ---
+# --- ログ設定 ---
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
-    # filename=... の行を削除しました
 )
 
 # --- 設定項目 ---
@@ -39,11 +38,17 @@ def main():
         data = response.json()
         logging.info("APIからデータを正常に取得しました。")
 
-        if not data.get('response'):
-             raise ValueError("APIレスポンスに 'response' が含まれていません。")
+        # ▼▼▼ データ構造のチェックを強化 ▼▼▼
+        if not data.get('response') or not data['response']:
+             raise ValueError("APIレスポンスに 'response' が含まれていないか、空です。")
         
-        standings_data = data['response'][0]['league']['standings'][0]
+        league_data = data['response'][0].get('league')
+        if not league_data or not league_data.get('standings') or not league_data['standings']:
+            raise ValueError("APIレスポンスに順位表データが含まれていません。")
+
+        standings_data = league_data['standings'][0]
         standings = [team['team']['name'] for team in standings_data]
+        # ▲▲▲ ここまで修正 ▲▲▲
 
         if not standings:
             raise ValueError("APIレスポンスから順位リストを作成できませんでした。")
@@ -54,7 +59,7 @@ def main():
             firebase_admin.initialize_app(cred)
             logging.info("Firebaseアプリを初期化しました。")
         
-        db = a=firestore.client()
+        db = firestore.client()
 
         doc_ref = db.collection('artifacts/predictionprediction/public/data/actualStandings').document('currentWeek')
         logging.info(f"Firestoreのドキュメント '{doc_ref.path}' を更新します。")
