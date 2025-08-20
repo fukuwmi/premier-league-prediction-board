@@ -12,7 +12,7 @@ logging.basicConfig(
 )
 
 # --- 設定項目 ---
-STANDINGS_URL = "https://www.premierleague.com/en/tables"
+STANDINGS_URL = "https://www.premierleague.com/tables"
 credentials_file_name = "predictionprediction-firebase-adminsdk-fbsvc-e801e9cb8b.json"
 
 def main():
@@ -30,8 +30,12 @@ def main():
 
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # ▼▼▼ この一行を修正しました ▼▼▼
-        standings_table = soup.find('tbody')
+        # ▼▼▼ この部分を、より確実な検索方法に修正しました ▼▼▼
+        table_container = soup.find('div', class_='tableContainer')
+        if not table_container:
+            raise ValueError("順位表のコンテナが見つかりませんでした。")
+        
+        standings_table = table_container.find('tbody')
         # ▲▲▲ ここまで修正 ▲▲▲
 
         if not standings_table:
