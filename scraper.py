@@ -1,111 +1,85 @@
 import os
-import json
 import requests
 import firebase_admin
 from firebase_admin import credentials, firestore
-from datetime import datetime, timezone, timedelta
-import time
+import logging
+import traceback
 
-# --- 【ここを修正】 ---
-# APIのURLを2024年シーズンから2025年シーズンに変更
-api_url = "https://footballapi.skysports.com/api/v1/competitions/1/seasons/2025/tables"
-# --- 【ここまで修正】 ---
+# --- ログ設定 ---
+logging.basicConfig(
+    filename='premier_league_scraper.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    encoding='utf-8'
+)
 
-project_id = "predictionprediction"
+# --- 設定項目 ---
+# API-Footballから取得したリーグIDとシーズン
+LEAGUE_ID = "39"  # プレミアリーグ
+SEASON = "2025"   # 2025-2026シーズン
+API_URL = f"https://v3.football.api-sports.io/standings?league={LEAGUE_ID}&season={SEASON}"
+
+# Firebaseの秘密鍵ファイル名（変更不要）
+credentials_file_name = "predictionprediction-firebase-adminsdk-fbsvc-e801e9cb8b.json"
+# --- 設定項目ここまで ---
 
 def main():
-    print("Process started to fetch data from API...")
-    
+    logging.info("====================")
+    logging.info("自動順位更新スクリプトを開始します。")
+
     try:
-        # 1. APIから順位表データを取得 (リトライ機能付き)
-        standings = None
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                print(f"Attempt {attempt + 1} of {max_retries} to fetch API data...")
-                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-                response = requests.get(api_url, headers=headers, timeout=30)
-                response.raise_for_status()
-                
-                data = response.json()
-                table_rows = data.get('tables', [{}])[0].get('rows', [])
+        # 1. GitHubのシークレットからAPIキーを取得
+        api_key = os.environ.get('API_FOOTBALL_KEY')
+        if not api_key:
+            raise ValueError("APIキーが設定されていません。GitHubのシークレットを確認してください。")
+        logging.info("APIキーを正常に読み込みました。")
 
-                if not table_rows:
-                     raise ValueError("Could not find standings data in the API response.")
+        headers = {
+            'x-rapidapi-host': 'v3.football.api-sports.io',
+            'x-rapidapi-key': api_key
+        }
 
-                team_name_map = {
-                    "Arsenal": "アーセナル", "Aston Villa": "アストン・ヴィラ", "Bournemouth": "ボーンマス",
-                    "Brentford": "ブレントフォード", "Brighton & Hove Albion": "ブライトン",
-                    "Chelsea": "チェルシー", "Crystal Palace": "クリスタル・パレス", "Everton": "エヴァートン", 
-                    "Fulham": "フラム", "Ipswich Town": "イプスウィッチ・タウン", "Leicester City": "レスター・シティ", 
-                    "Liverpool": "リヴァプール", "Manchester City": "マンチェスター・シティ", "Manchester United": "マンチェスター・ユナイテッド",
-                    "Newcastle United": "ニューカッスル・ユナイテッド", "Nottingham Forest": "ノッティンガム・フォレスト",
-                    "Southampton": "サウサンプトン", "Tottenham Hotspur": "トッテナム",
-                    "West Ham United": "ウェストハム", "Wolverhampton Wanderers": "ウルヴァーハンプトン",
-                    "Burnley": "バーンリー", "Leeds United": "リーズ・ユナイテッド", "Sunderland": "サンダーランド"
-                }
+        # 2. APIから順位表データを取得
+        logging.info(f"APIエンドポイントにリクエストを送信します: {API_URL}")
+        response = requests.get(API_URL, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        logging.info("APIからデータを正常に取得しました。")
 
-                scraped_standings = []
-                sorted_rows = sorted(table_rows, key=lambda x: x.get('position', 99))
-
-                for row in sorted_rows:
-                    english_name = row.get('team', {}).get('name', '').strip()
-                    japanese_name = team_name_map.get(english_name)
-                    if japanese_name:
-                        scraped_standings.append(japanese_name)
-
-                if len(scraped_standings) == 20:
-                    standings = scraped_standings
-                    print("Successfully parsed standings from API.")
-                    break
-                else:
-                     raise ValueError(f"Expected 20 teams, but parsed {len(scraped_standings)}.")
-
-            except requests.exceptions.RequestException as e:
-                print(f"Network error on attempt {attempt + 1}: {e}")
-                if attempt < max_retries - 1:
-                    print("Retrying in 15 seconds...")
-                    time.sleep(15)
-                else:
-                    print("Max retries reached. Failing.")
-                    raise
+        # 3. 取得したデータから順位リストを作成
+        standings_data = data['response'][0]['league']['standings'][0]
+        standings = [team['team']['name'] for team in standings_data]
+        if not standings:
+            raise ValueError("APIレスポンスから順位リストを作成できませんでした。")
+        logging.info(f"{len(standings)}チームの順位を解析しました。")
         
-        if standings is None:
-            raise ValueError("Failed to fetch standings after multiple retries.")
-
-        for i, team in enumerate(standings):
-            print(f"{i+1}: {team}")
-
-        # 2. Firebaseに接続
-        firebase_credentials_json = os.environ.get('FIREBASE_CREDENTIALS')
-        if not firebase_credentials_json:
-            raise ValueError("FIREBASE_CREDENTIALS secret not found.")
-        
-        cred_dict = json.loads(firebase_credentials_json)
-        cred = credentials.Certificate(cred_dict)
-        
+        # 4. Firebaseに接続
+        logging.info("Firebaseアプリの初期化を確認します。")
         if not firebase_admin._apps:
+            # GitHub Actionsの実行環境では、ファイルから直接読み込む
+            cred = credentials.Certificate(credentials_file_name)
             firebase_admin.initialize_app(cred)
-            
+            logging.info("Firebaseアプリを初期化しました。")
+        
         db = firestore.client()
 
-        # 3. 取得した順位をFirestoreに保存
-        doc_ref = db.collection('artifacts').document(project_id).collection('public').document('data').collection('actualStandings').document('currentWeek')
-        
-        jst = timezone(timedelta(hours=9))
-        
-        data_to_save = {
+        # 5. 取得した順位をFirestoreに保存
+        doc_ref = db.collection('artifacts/predictionprediction/public/data/actualStandings').document('currentWeek')
+        logging.info(f"Firestoreのドキュメント '{doc_ref.path}' を更新します。")
+        doc_ref.set({
             'standings': standings,
-            'lastUpdated': datetime.now(jst)
-        }
-        doc_ref.set(data_to_save)
-        
-        print("Successfully updated Firestore document 'currentWeek'.")
-        print("Process finished.")
+            'lastUpdated': firestore.SERVER_TIMESTAMP
+        })
+        logging.info("Firestoreへのデータ書き込みが正常に完了しました。")
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        logging.error("スクリプトの実行中にエラーが発生しました。")
+        logging.error(traceback.format_exc())
         exit(1)
+    
+    finally:
+        logging.info("自動順位更新スクリプトを終了します。")
+        logging.info("====================\n")
 
 if __name__ == "__main__":
     main()
