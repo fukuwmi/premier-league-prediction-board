@@ -24,19 +24,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests firebase-admin
 
-      # ▼▼▼ ここが新しい部分です ▼▼▼
-      - name: Create Firebase credentials file using Python
-        env:
-          FIREBASE_CREDENTIALS_JSON: ${{ secrets.FIREBASE_CREDENTIALS_JSON }}
-        run: |
-          import json
-          # シークレットから改行の問題がある文字列を取得
-          creds_str_with_newlines = '''${{ env.FIREBASE_CREDENTIALS_JSON }}'''
-          # Pythonのjsonライブラリで正しく解釈
-          creds_dict = json.loads(creds_str_with_newlines)
-          # 正しい形式でファイルに書き出す
-          with open('predictionprediction-firebase-adminsdk-fbsvc-e801e9cb8b.json', 'w') as f:
-              json.dump(creds_dict, f)
+      - name: Create Firebase credentials file
+        run: echo "${{ secrets.FIREBASE_CREDENTIALS }}" > predictionprediction-firebase-adminsdk-fbsvc-e801e9cb8b.json
 
       - name: Run Scraper
         env:
