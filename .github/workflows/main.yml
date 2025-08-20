@@ -27,14 +27,6 @@ jobs:
       - name: Create Firebase credentials file
         run: echo "${{ secrets.FIREBASE_CREDENTIALS_JSON }}" > predictionprediction-firebase-adminsdk-fbsvc-e801e9cb8b.json
 
-      # --- ▼▼▼ デバッグ用に追加 ▼▼▼ ---
-      - name: Check if files exist
-        run: ls -l
-
-      - name: Display Firebase credentials content (for debugging)
-        run: cat predictionprediction-firebase-adminsdk-fbsvc-e801e9cb8b.json
-      # --- ▲▲▲ デバッグ用に追加 ▲▲▲ ---
-
       - name: Run Scraper
         env:
           API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
