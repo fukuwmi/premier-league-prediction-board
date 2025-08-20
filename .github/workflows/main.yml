@@ -1,10 +1,13 @@
-name: Firebase Connection Test
+name: Update Premier League Standings
 
 on:
+  schedule:
+    # 毎日23:00 (UTC) に実行 (日本時間の午前8時)
+    - cron: '0 23 * * *'
   workflow_dispatch:
 
 jobs:
-  test:
+  scrape:
     runs-on: ubuntu-latest
 
     steps:
@@ -17,10 +20,25 @@ jobs:
           python-version: '3.10'
 
       - name: Install dependencies
-        run: pip install firebase-admin
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests firebase-admin
 
-      - name: Create Firebase credentials file
-        run: echo "${{ secrets.FIREBASE_CREDENTIALS_JSON }}" > predictionprediction-firebase-adminsdk-fbsvc-e801e9cb8b.json
+      # ▼▼▼ ここが新しい部分です ▼▼▼
+      - name: Create Firebase credentials file using Python
+        env:
+          FIREBASE_CREDENTIALS_JSON: ${{ secrets.FIREBASE_CREDENTIALS_JSON }}
+        run: |
+          import json
+          # シークレットから改行の問題がある文字列を取得
+          creds_str_with_newlines = '''${{ env.FIREBASE_CREDENTIALS_JSON }}'''
+          # Pythonのjsonライブラリで正しく解釈
+          creds_dict = json.loads(creds_str_with_newlines)
+          # 正しい形式でファイルに書き出す
+          with open('predictionprediction-firebase-adminsdk-fbsvc-e801e9cb8b.json', 'w') as f:
+              json.dump(creds_dict, f)
 
-      - name: Run Test Script
+      - name: Run Scraper
+        env:
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
         run: python scraper.py
