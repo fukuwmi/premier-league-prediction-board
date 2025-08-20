@@ -12,16 +12,14 @@ logging.basicConfig(
 )
 
 # --- 設定項目 ---
-# プレミアリーグ公式サイトの順位表URL
 STANDINGS_URL = "https://www.premierleague.com/tables"
-credentials_file_name = "predictionprediction-firebase-adminsdk-fvc-e801e9cb8b.json" # ←ファイル名を修正しました
+credentials_file_name = "predictionprediction-firebase-adminsdk-fbsvc-e801e9cb8b.json"
 
 def main():
     logging.info("====================")
     logging.info("自動順位更新スクリプトを開始します（スクレイピング版）。")
 
     try:
-        # 1. 公式サイトからHTMLを取得
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
@@ -30,17 +28,18 @@ def main():
         response.raise_for_status()
         logging.info("HTMLを正常に取得しました。")
 
-        # 2. HTMLを解析して順位リストを作成
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        standings_table = soup.find('tbody', class_='tableBodyContainer')
+        # ▼▼▼ この一行を修正しました ▼▼▼
+        standings_table = soup.find('tbody')
+        # ▲▲▲ ここまで修正 ▲▲▲
+
         if not standings_table:
             raise ValueError("順位表のtbodyが見つかりませんでした。")
 
         rows = standings_table.find_all('tr')
         standings = []
         for row in rows:
-            # チーム名が含まれるspanタグを探す
             team_name_span = row.find('span', class_='long')
             if team_name_span:
                 standings.append(team_name_span.text.strip())
@@ -49,7 +48,6 @@ def main():
             raise ValueError("HTMLから順位リストを作成できませんでした。")
         logging.info(f"{len(standings)}チームの順位を解析しました。")
         
-        # 3. Firebaseに接続・書き込み (この部分は変更なし)
         if not firebase_admin._apps:
             cred = credentials.Certificate(credentials_file_name)
             firebase_admin.initialize_app(cred)
