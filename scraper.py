@@ -1,70 +1,77 @@
-import os
 import requests
+from bs4 import BeautifulSoup
 import firebase_admin
 from firebase_admin import credentials, firestore
-import sys
+import logging
 import traceback
 
-# --- 設定項目（変更なし） ---
-LEAGUE_ID = "39"
-SEASON = "2025"
-API_URL = f"https://v3.football.api-sports.io/standings?league={LEAGUE_ID}&season={SEASON}"
-credentials_file_name = "predictionprediction-firebase-adminsdk-fbsvc-e801e9cb8b.json"
+# --- ログ設定 ---
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+# --- 設定項目 ---
+# プレミアリーグ公式サイトの順位表URL
+STANDINGS_URL = "https://www.premierleague.com/tables"
+credentials_file_name = "predictionprediction-firebase-adminsdk-fvc-e801e9cb8b.json" # ←ファイル名を修正しました
 
 def main():
-    print("--- スクリプト実行開始 ---")
+    logging.info("====================")
+    logging.info("自動順位更新スクリプトを開始します（スクレイピング版）。")
 
     try:
-        # 1. APIキーの読み込み
-        api_key = os.environ.get('API_FOOTBALL_KEY')
-        if not api_key:
-            raise ValueError("APIキーが設定されていません。")
-        print("1. APIキー読み込み成功")
-
-        # 2. APIリクエスト
+        # 1. 公式サイトからHTMLを取得
         headers = {
-            'x-rapidapi-host': 'v3.football.api-sports.io',
-            'x-rapidapi-key': api_key
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
-        response = requests.get(API_URL, headers=headers)
+        logging.info(f"公式サイトにリクエストを送信します: {STANDINGS_URL}")
+        response = requests.get(STANDINGS_URL, headers=headers)
         response.raise_for_status()
-        data = response.json()
-        print("2. APIからのデータ取得成功")
+        logging.info("HTMLを正常に取得しました。")
 
-        # 3. データ解析
-        if not data.get('response') or not data['response']:
-             raise ValueError("APIレスポンスに 'response' が含まれていません。")
-        league_data = data['response'][0].get('league')
-        if not league_data or not league_data.get('standings') or not league_data['standings']:
-            raise ValueError("APIレスポンスに順位表データが含まれていません。")
-        standings_data = league_data['standings'][0]
-        standings = [team['team']['name'] for team in standings_data]
+        # 2. HTMLを解析して順位リストを作成
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        standings_table = soup.find('tbody', class_='tableBodyContainer')
+        if not standings_table:
+            raise ValueError("順位表のtbodyが見つかりませんでした。")
+
+        rows = standings_table.find_all('tr')
+        standings = []
+        for row in rows:
+            # チーム名が含まれるspanタグを探す
+            team_name_span = row.find('span', class_='long')
+            if team_name_span:
+                standings.append(team_name_span.text.strip())
+
         if not standings:
-            raise ValueError("順位リストの作成に失敗。")
-        print("3. データ解析成功")
-
-        # 4. Firebase初期化
+            raise ValueError("HTMLから順位リストを作成できませんでした。")
+        logging.info(f"{len(standings)}チームの順位を解析しました。")
+        
+        # 3. Firebaseに接続・書き込み (この部分は変更なし)
         if not firebase_admin._apps:
             cred = credentials.Certificate(credentials_file_name)
             firebase_admin.initialize_app(cred)
-        print("4. Firebase初期化成功")
-
-        # 5. Firestoreへの書き込み
+        
         db = firestore.client()
+
         doc_ref = db.collection('artifacts/predictionprediction/public/data/actualStandings').document('currentWeek')
+        logging.info(f"Firestoreのドキュメント '{doc_ref.path}' を更新します。")
         doc_ref.set({
             'standings': standings,
             'lastUpdated': firestore.SERVER_TIMESTAMP
         })
-        print("5. Firestoreへの書き込み成功")
+        logging.info("Firestoreへのデータ書き込みが正常に完了しました。")
 
     except Exception as e:
-        # ▼▼▼ エラー出力方法を変更 ▼▼▼
-        print("--- エラー発生！詳細を標準エラー出力に書き出します ---", file=sys.stderr)
-        traceback.print_exc(file=sys.stderr)
+        logging.error("スクリプトの実行中にエラーが発生しました。")
+        logging.error(traceback.format_exc())
         exit(1)
     
-    print("--- スクリプト正常終了 ---")
+    finally:
+        logging.info("自動順位更新スクリプトを終了します。")
+        logging.info("====================\n")
 
 if __name__ == "__main__":
     main()
