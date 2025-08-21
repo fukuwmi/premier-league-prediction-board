@@ -5,7 +5,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium_stealth import stealth # stealthライブラリをインポート
+from selenium_stealth import stealth
 import logging
 import traceback
 import time
@@ -32,7 +32,6 @@ def main():
         
         driver = webdriver.Chrome(options=options)
 
-        # ▼▼▼ stealthを設定 ▼▼▼
         stealth(driver,
                 languages=["en-US", "en"],
                 vendor="Google Inc.",
@@ -41,13 +40,12 @@ def main():
                 renderer="Intel Iris OpenGL Engine",
                 fix_hairline=True,
                 )
-        # ▲▲▲ ここまで追加 ▲▲▲
         logging.info("ヘッドレスChromeブラウザをStealthモードで起動しました。")
 
         driver.get(STANDINGS_URL)
         logging.info(f"公式サイトにアクセスします: {STANDINGS_URL}")
 
-        time.sleep(5) # ページが反応するまで少し待機
+        time.sleep(5)
 
         try:
             WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.ID, "onetrust-accept-btn-handler"))).click()
@@ -55,10 +53,13 @@ def main():
         except:
             logging.info("Cookieの同意ボタンは見つかりませんでした。")
 
-        time.sleep(5) # クリック後に描画が安定するまで待機
+        time.sleep(5)
 
+        # ▼▼▼ ここの目印を、より正確なものに戻しました ▼▼▼
         wait = WebDriverWait(driver, 60)
-        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "div.tableContainer")))
+        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "div[data-widget='standings-table']")))
+        # ▲▲▲ ここまで修正 ▲▲▲
+        
         logging.info("順位表の表示を確認しました。")
 
         html = driver.page_source
@@ -80,7 +81,6 @@ def main():
             raise ValueError("HTMLから順位リストを作成できませんでした。")
         logging.info(f"{len(standings)}チームの順位を解析しました。")
         
-        # Firebase接続・書き込み (変更なし)
         if not firebase_admin._apps:
             cred = credentials.Certificate(credentials_file_name)
             firebase_admin.initialize_app(cred)
