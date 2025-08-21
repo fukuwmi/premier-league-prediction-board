@@ -1,85 +1,41 @@
+import os
+import requests
 import firebase_admin
 from firebase_admin import credentials, firestore
-from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium_stealth import stealth
 import logging
 import traceback
-import time
 
-# --- ログ設定 ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # --- 設定項目 ---
-STANDINGS_URL = "https://www.premierleague.com/tables"
+API_URL = "https://api.football-data.org/v4/competitions/PL/standings"
 credentials_file_name = "predictionprediction-firebase-adminsdk-fbsvc-e801e9cb8b.json"
 
 def main():
     logging.info("====================")
-    logging.info("自動順位更新スクリプトを開始します（Selenium Stealth版）。")
-    
-    driver = None
+    logging.info("自動順位更新スクリプトを開始します（Football-Data.org版）。")
+
     try:
-        options = webdriver.ChromeOptions()
-        options.add_argument("--headless")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_experimental_option('useAutomationExtension', False)
+        api_key = os.environ.get('FOOTBALL_DATA_API_KEY')
+        if not api_key:
+            raise ValueError("APIキーが設定されていません。")
         
-        driver = webdriver.Chrome(options=options)
+        headers = {'X-Auth-Token': api_key}
 
-        stealth(driver,
-                languages=["en-US", "en"],
-                vendor="Google Inc.",
-                platform="Win32",
-                webgl_vendor="Intel Inc.",
-                renderer="Intel Iris OpenGL Engine",
-                fix_hairline=True,
-                )
-        logging.info("ヘッドレスChromeブラウザをStealthモードで起動しました。")
+        logging.info(f"APIエンドポイントにリクエストを送信します: {API_URL}")
+        response = requests.get(API_URL, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        logging.info("APIからデータを正常に取得しました。")
 
-        driver.get(STANDINGS_URL)
-        logging.info(f"公式サイトにアクセスします: {STANDINGS_URL}")
+        if not data.get('standings') or not data['standings'][0].get('table'):
+            raise ValueError("APIレスポンスから順位表が見つかりません。")
 
-        time.sleep(5)
-
-        try:
-            WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.ID, "onetrust-accept-btn-handler"))).click()
-            logging.info("Cookieの同意ボタンをクリックしました。")
-        except:
-            logging.info("Cookieの同意ボタンは見つかりませんでした。")
-
-        time.sleep(5)
-
-        # ▼▼▼ ここの待機時間を60秒から120秒に延長しました ▼▼▼
-        wait = WebDriverWait(driver, 120)
-        # ▲▲▲ ここまで修正 ▲▲▲
-        
-        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "div[data-widget='standings-table']")))
-        
-        logging.info("順位表の表示を確認しました。")
-
-        html = driver.page_source
-        soup = BeautifulSoup(html, 'html.parser')
-        
-        standings_table = soup.find('tbody')
-        if not standings_table:
-            raise ValueError("順位表のtbodyが見つかりませんでした。")
-
-        rows = standings_table.find_all('tr')
-        standings = []
-        for row in rows:
-            if row.has_attr('data-team-id'):
-                team_name_span = row.find('span', class_='long')
-                if team_name_span:
-                    standings.append(team_name_span.text.strip())
+        standings_data = data['standings'][0]['table']
+        standings = [row['team']['name'] for row in standings_data]
 
         if not standings:
-            raise ValueError("HTMLから順位リストを作成できませんでした。")
+            raise ValueError("順位リストの作成に失敗。")
         logging.info(f"{len(standings)}チームの順位を解析しました。")
         
         if not firebase_admin._apps:
@@ -97,8 +53,6 @@ def main():
         exit(1)
     
     finally:
-        if driver:
-            driver.quit()
         logging.info("自動順位更新スクリプトを終了します。")
         logging.info("====================\n")
 
