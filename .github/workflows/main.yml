@@ -36,4 +36,4 @@ jobs:
         env:
           FOOTBALL_DATA_API_KEY: ${{ secrets.FOOTBALL_DATA_API_KEY }}
           FIREBASE_CREDENTIALS: ${{ secrets.FIREBASE_CREDENTIALS }}
-        run: python your_script_name.py # ← your_script_name.py は実際のファイル名に書き換えてください
+        run: python scraper.py
