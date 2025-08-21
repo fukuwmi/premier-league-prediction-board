@@ -22,7 +22,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests firebase-admin beautifulsoup4 selenium
+          pip install requests firebase-admin beautifulsoup4 selenium selenium-stealth
 
       - name: Create Firebase credentials file
         run: echo "${{ secrets.FIREBASE_CREDENTIALS }}" > predictionprediction-firebase-adminsdk-fbsvc-e801e9cb8b.json
