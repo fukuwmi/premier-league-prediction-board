@@ -55,7 +55,10 @@ def main():
 
         time.sleep(5)
 
-        wait = WebDriverWait(driver, 60)
+        # ▼▼▼ ここの待機時間を60秒から120秒に延長しました ▼▼▼
+        wait = WebDriverWait(driver, 120)
+        # ▲▲▲ ここまで修正 ▲▲▲
+        
         wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "div[data-widget='standings-table']")))
         
         logging.info("順位表の表示を確認しました。")
