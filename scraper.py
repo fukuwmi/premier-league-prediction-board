@@ -1,105 +1,35 @@
 import firebase_admin
 from firebase_admin import credentials, firestore
-from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium_stealth import stealth
-import logging
+import sys
 import traceback
-import time
 
-# --- ログ設定 ---
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-# --- 設定項目 ---
-STANDINGS_URL = "https://www.premierleague.com/tables"
+# Firebaseの秘密鍵ファイル名
 credentials_file_name = "predictionprediction-firebase-adminsdk-fbsvc-e801e9cb8b.json"
 
-def main():
-    logging.info("====================")
-    logging.info("自動順位更新スクリプトを開始します（Selenium Stealth版）。")
-    
-    driver = None
-    try:
-        options = webdriver.ChromeOptions()
-        options.add_argument("--headless")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_experimental_option('useAutomationExtension', False)
-        
-        driver = webdriver.Chrome(options=options)
+print("--- Firebase接続テストを開始します ---")
 
-        stealth(driver,
-                languages=["en-US", "en"],
-                vendor="Google Inc.",
-                platform="Win32",
-                webgl_vendor="Intel Inc.",
-                renderer="Intel Iris OpenGL Engine",
-                fix_hairline=True,
-                )
-        logging.info("ヘッドレスChromeブラウザをStealthモードで起動しました。")
+try:
+    print("1. 秘密鍵ファイルを読み込みます。")
+    cred = credentials.Certificate(credentials_file_name)
+    print("2. 秘密鍵の読み込みに成功しました。")
 
-        driver.get(STANDINGS_URL)
-        logging.info(f"公式サイトにアクセスします: {STANDINGS_URL}")
+    print("3. Firebaseアプリを初期化します。")
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app(cred)
+    print("4. Firebaseアプリの初期化に成功しました。")
 
-        time.sleep(5)
+    db = firestore.client()
+    print("5. Firestoreクライアントの取得に成功しました。")
 
-        try:
-            WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.ID, "onetrust-accept-btn-handler"))).click()
-            logging.info("Cookieの同意ボタンをクリックしました。")
-        except:
-            logging.info("Cookieの同意ボタンは見つかりませんでした。")
+    test_doc_ref = db.collection('test_collection').document('test_doc')
+    print(f"6. テストデータを書き込みます: {test_doc_ref.path}")
 
-        time.sleep(5)
+    test_doc_ref.set({'status': 'ok', 'timestamp': firestore.SERVER_TIMESTAMP})
+    print("7. テストデータの書き込みに成功しました！")
 
-        # ▼▼▼ ここの目印を、より正確なものに戻しました ▼▼▼
-        wait = WebDriverWait(driver, 60)
-        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "div[data-widget='standings-table']")))
-        # ▲▲▲ ここまで修正 ▲▲▲
-        
-        logging.info("順位表の表示を確認しました。")
+except Exception as e:
+    print("--- エラーが発生しました ---", file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
+    exit(1)
 
-        html = driver.page_source
-        soup = BeautifulSoup(html, 'html.parser')
-        
-        standings_table = soup.find('tbody')
-        if not standings_table:
-            raise ValueError("順位表のtbodyが見つかりませんでした。")
-
-        rows = standings_table.find_all('tr')
-        standings = []
-        for row in rows:
-            if row.has_attr('data-team-id'):
-                team_name_span = row.find('span', class_='long')
-                if team_name_span:
-                    standings.append(team_name_span.text.strip())
-
-        if not standings:
-            raise ValueError("HTMLから順位リストを作成できませんでした。")
-        logging.info(f"{len(standings)}チームの順位を解析しました。")
-        
-        if not firebase_admin._apps:
-            cred = credentials.Certificate(credentials_file_name)
-            firebase_admin.initialize_app(cred)
-        
-        db = firestore.client()
-        doc_ref = db.collection('artifacts/predictionprediction/public/data/actualStandings').document('currentWeek')
-        doc_ref.set({'standings': standings, 'lastUpdated': firestore.SERVER_TIMESTAMP})
-        logging.info("Firestoreへのデータ書き込みが正常に完了しました。")
-
-    except Exception as e:
-        logging.error("スクリプトの実行中にエラーが発生しました。")
-        logging.error(traceback.format_exc())
-        exit(1)
-    
-    finally:
-        if driver:
-            driver.quit()
-        logging.info("自動順位更新スクリプトを終了します。")
-        logging.info("====================\n")
-
-if __name__ == "__main__":
-    main()
+print("--- Firebase接続テストは正常に完了しました ---")
